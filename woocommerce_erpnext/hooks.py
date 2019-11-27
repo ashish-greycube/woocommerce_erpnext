@@ -87,6 +87,12 @@ app_license = "MIT"
 #	}
 # }
 
+doc_events = {
+    "Item": {
+        "on_update": "woocommerce_erpnext.woo_connector.on_update_item"
+    }
+}
+
 # Scheduled Tasks
 # ---------------
 
@@ -126,4 +132,3 @@ app_license = "MIT"
 # override_doctype_dashboards = {
 # 	"Task": "woocommerce_erpnext.task.get_dashboard_data"
 # }
-
