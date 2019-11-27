@@ -4,6 +4,7 @@ from woocommerce import API
 import frappe
 from frappe.utils import cstr
 from erpnext.utilities.product import get_price
+from erpnext.erpnext_integrations.connectors.woocommerce_connection import verify_request, set_items_in_sales_order
 
 
 def handle_response_error(r):
@@ -140,97 +141,55 @@ def order(*args, **kwargs):
         raise
 
 
-# def _order(*args, **kwargs):
-#     woocommerce_settings = frappe.get_doc("Woocommerce Settings")
-#     if frappe.flags.woocomm_test_order_data:
-#         fd = frappe.flags.woocomm_test_order_data
-#         event = "created"
+def _order(*args, **kwargs):
+    woocommerce_settings = frappe.get_doc("Woocommerce Settings")
+    if frappe.flags.woocomm_test_order_data:
+        order = frappe.flags.woocomm_test_order_data
+        event = "created"
 
-#     elif frappe.request and frappe.request.data:
-#         verify_request()
-#         fd = json.loads(frappe.request.data)
-#         event = frappe.get_request_header("X-Wc-Webhook-Event")
+    elif frappe.request and frappe.request.data:
+        verify_request()
+        try:
+            order = json.loads(frappe.request.data)
+        except ValueError:
+            # woocommerce returns 'webhook_id=value' for the first request which is not JSON
+            order = frappe.request.data
+        event = frappe.get_request_header("X-Wc-Webhook-Event")
 
-#     else:
-#         return "success"
+    else:
+        return "success"
 
-#     if event == "created":
-#         def get_mapped_so(data):
-#             so = frappe.new_doc("Sales Order")
-#             data.get("email")
+    if event == "created":
+        raw_billing_data = order.get("billing")
+        customer_name = raw_billing_data.get(
+            "first_name") + " " + raw_billing_data.get("last_name")
+        create_sales_order(order, woocommerce_settings, customer_name)
 
-#             raw_billing_data = fd.get("billing")
-#             customer_woo_com_email = raw_billing_data.get("email")
 
-#             if frappe.get_value("Customer", {"woocommerce_email": customer_woo_com_email}):
-#                 # Edit
-#                 link_customer_and_address(raw_billing_data, 1)
-#             else:
-#                 # Create
-#                 link_customer_and_address(raw_billing_data, 0)
+def create_sales_order(order, woocommerce_settings, customer_name):
+    new_sales_order = frappe.new_doc("Sales Order")
+    new_sales_order.customer = customer_name
 
-#             items_list = fd.get("line_items")
+    new_sales_order.po_no = new_sales_order.woocommerce_id = order.get("id")
+    new_sales_order.naming_series = woocommerce_settings.sales_order_series or "SO-WOO-"
 
-#             customer_name = raw_billing_data.get(
-#                 "first_name") + " " + raw_billing_data.get("last_name")
+    created_date = order.get("date_created").split("T")
+    new_sales_order.transaction_date = created_date[0]
+    delivery_after = woocommerce_settings.delivery_after_days or 7
+    new_sales_order.delivery_date = frappe.utils.add_days(
+        created_date[0], delivery_after)
 
-#             new_sales_order = frappe.new_doc("Sales Order")
-#             new_sales_order.customer = customer_name
+    new_sales_order.company = woocommerce_settings.company
 
-#             created_date = fd.get("date_created").split("T")
-#             new_sales_order.transaction_date = created_date[0]
+    set_items_in_sales_order(new_sales_order, woocommerce_settings, order)
 
-#             new_sales_order.po_no = fd.get("id")
-#             new_sales_order.woocommerce_id = fd.get("id")
-#             new_sales_order.naming_series = woocommerce_settings.sales_order_series or "SO-WOO-"
+    for item in new_sales_order.items:
+        stock_uom = frappe.db.get_value(
+            "Item", {"item_code": item.item_code}, "stock_uom")
+        item.update({"uom": stock_uom})
 
-#             placed_order_date = created_date[0]
-#             raw_date = datetime.datetime.strptime(
-#                 placed_order_date, "%Y-%m-%d")
-#             raw_delivery_date = frappe.utils.add_to_date(raw_date, days=7)
-#             order_delivery_date_str = raw_delivery_date.strftime('%Y-%m-%d')
-#             order_delivery_date = str(order_delivery_date_str)
+    new_sales_order.flags.ignore_mandatory = True
+    new_sales_order.insert()
+    new_sales_order.submit()
 
-#             new_sales_order.delivery_date = order_delivery_date
-#             default_set_company = frappe.get_doc("Global Defaults")
-#             company = raw_billing_data.get(
-#                 "company") or default_set_company.default_company
-#             found_company = frappe.get_doc("Company", {"name": company})
-#             company_abbr = found_company.abbr
-
-#             new_sales_order.company = company
-
-#             for item in items_list:
-#                 def get_mapped_item(i):
-#                     mapped = frappe.db.get_value("Item", {"woocommerce_id": i.get(
-#                         "product_id")}, ['item_code', 'item_name', 'stock_uom', ], as_dict=True)
-#                     mapped["uom"] = mapped["stock_uom"]
-#                     mapped["description"] = mapped["item_name"]
-#                     delete mapped["stock_uom"]
-
-#                 so_item = get_mapped_item(item)
-#                 so_item.update(
-#                     {
-#                         "delivery_date": order_delivery_date,
-#                         "ordered_items_tax": item.get("total_tax"),
-#                         "warehouse": woocommerce_settings.warehouse or "Stores" + " - " + company_abbr,
-#                         "qty": item.get("quantity"),
-#                         "rate": item.get("price"),
-#                     }
-#                 )
-#                 new_sales_order.append("items", item)
-
-#                 add_tax_details(new_sales_order, ordered_items_tax,
-#                                 "Ordered Item tax", 0)
-
-#             # shipping_details = fd.get("shipping_lines") # used for detailed order
-#             shipping_total = fd.get("shipping_total")
-#             shipping_tax = fd.get("shipping_tax")
-
-#             add_tax_details(new_sales_order, shipping_tax, "Shipping Tax", 1)
-#             add_tax_details(new_sales_order, shipping_total,
-#                             "Shipping Total", 1)
-
-#         new_sales_order.submit()
-
-#         frappe.db.commit()
+    frappe.db.commit()
