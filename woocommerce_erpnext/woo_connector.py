@@ -2,9 +2,11 @@
 from __future__ import unicode_literals
 from woocommerce import API
 import frappe
-from frappe.utils import cstr
+from frappe.utils import cstr, cint
 from erpnext.utilities.product import get_price
-from erpnext.erpnext_integrations.connectors.woocommerce_connection import verify_request, set_items_in_sales_order
+from erpnext.erpnext_integrations.connectors.woocommerce_connection import (
+    verify_request, set_items_in_sales_order)
+import json
 
 
 def handle_response_error(r):
@@ -36,7 +38,7 @@ def sync_all_items():
 def sync_product_categories(item_group=None):
     # sync Erpnext Item Group to WooCommerce Product Category
     # Does not handle nested item group
-    r = get_connection().get("products/categories").json()
+    r = get_connection().get("products/categories?per_page=100").json()
     categories = {}
     for d in r:
         categories[d["name"]] = d["id"]
@@ -54,9 +56,9 @@ def sync_product_categories(item_group=None):
                     frappe.db.set_value("Item Group", d.name,
                                         'woocommerce_id_za', product_category_id)
             else:
-                if not categories.get(d.name) or not categories.get(d.name) == d.woocommerce_id_za:
+                if not categories.get(d.name) or not categories.get(d.name) == cint(d.woocommerce_id_za):
                     frappe.throw(
-                        "Item group %s (%s)does not match WooCommerce Product Category" % (d.name, d.woocommerce_id_za))
+                        "Item group %s (%s) does not match WooCommerce Product Category %s" % (d.name, d.woocommerce_id_za, categories.get(d.name)))
 
     frappe.db.commit()
 
@@ -88,12 +90,11 @@ def get_mapped_product(item_doc):
                 "id": wc_product_category_id
             }
         ],
+
         # "images": [
         #     {
-        #         "src": "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_front.jpg"
-        #     },
-        #     {
-        #         "src": "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_back.jpg"
+        #         "src":  "{}/{}".format(frappe.utils.get_url(), item_doc.image) if item_doc.image else ""
+        #         # "src": "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_front.jpg"
         #     }
         # ]
     }
@@ -126,8 +127,8 @@ def get_category(product_category_id):
 
 
 def test():
-    doc = frappe.get_doc("Item", "BANANA CINNAMON-50GM-BOX")
-    on_update_item(doc)
+    data = json.loads(payload)
+    order(**data)
 
 
 @frappe.whitelist(allow_guest=True)
@@ -158,6 +159,9 @@ def _order(*args, **kwargs):
 
     else:
         return "success"
+
+    # event = "created"
+    # order = json.loads(payload)
 
     if event == "created":
         raw_billing_data = order.get("billing")
@@ -193,3 +197,132 @@ def create_sales_order(order, woocommerce_settings, customer_name):
     new_sales_order.submit()
 
     frappe.db.commit()
+
+
+payload = """
+{
+  "id": 956,
+  "parent_id": 0,
+  "number": "956",
+  "order_key": "wc_order_14AHdr1cc8ESd",
+  "created_via": "checkout",
+  "version": "3.8.0",
+  "status": "on-hold",
+  "currency": "USD",
+  "date_created": "2019-11-28T14:13:19",
+  "date_created_gmt": "2019-11-28T14:13:19",
+  "date_modified": "2019-11-28T14:13:20",
+  "date_modified_gmt": "2019-11-28T14:13:20",
+  "discount_total": "0.00",
+  "discount_tax": "0.00",
+  "shipping_total": "0.00",
+  "shipping_tax": "0.00",
+  "cart_tax": "0.84",
+  "total": "13.59",
+  "total_tax": "0.84",
+  "prices_include_tax": false,
+  "customer_id": 2,
+  "customer_ip_address": "157.32.134.99",
+  "customer_user_agent": "Mozilla\\/5.0 (Macintosh; Intel Mac OS X 10_15_1) AppleWebKit\\/537.36 (KHTML, like Gecko) Chrome\\/78.0.3904.108 Safari\\/537.36",
+  "customer_note": "",
+  "billing": {
+    "first_name": "Luz",
+    "last_name": "figuereo",
+    "company": "",
+    "address_1": "Street 1",
+    "address_2": "Apt 2",
+    "city": "NJ",
+    "state": "NJ",
+    "postcode": "07001",
+    "country": "US",
+    "email": "luz@mailhub24.com",
+    "phone": "75757575"
+  },
+  "shipping": {
+    "first_name": "",
+    "last_name": "",
+    "company": "",
+    "address_1": "",
+    "address_2": "",
+    "city": "",
+    "state": "",
+    "postcode": "",
+    "country": ""
+  },
+  "payment_method": "bacs",
+  "payment_method_title": "Direct bank transfer",
+  "transaction_id": "",
+  "date_paid": null,
+  "date_paid_gmt": null,
+  "date_completed": null,
+  "date_completed_gmt": null,
+  "cart_hash": "125b6fc08f7c6f2c96ee1881fa373a7e",
+  "meta_data": [
+    {
+      "id": 11690,
+      "key": "is_vat_exempt",
+      "value": "no"
+    }
+  ],
+  "line_items": [
+    {
+      "id": 81,
+      "name": "TWO APPLE -50GM-CARTON",
+      "product_id": 384,
+      "variation_id": 0,
+      "quantity": 1,
+      "tax_class": "",
+      "subtotal": "12.75",
+      "subtotal_tax": "0.84",
+      "total": "12.75",
+      "total_tax": "0.84",
+      "taxes": [
+        {
+          "id": 1,
+          "total": "0.84",
+          "subtotal": "0.84"
+        }
+      ],
+      "meta_data": [],
+      "sku": "TWO APPLE -50GM-CARTON",
+      "price": 12.75
+    }
+  ],
+  "tax_lines": [
+    {
+      "id": 82,
+      "rate_code": "US-NJ-NJ TAX-1",
+      "rate_id": 1,
+      "label": "NJ Tax",
+      "compound": false,
+      "tax_total": "0.84",
+      "shipping_tax_total": "0.00",
+      "rate_percent": 6.625,
+      "meta_data": []
+    }
+  ],
+  "shipping_lines": [],
+  "fee_lines": [],
+  "coupon_lines": [],
+  "refunds": [],
+  "currency_symbol": "$",
+  "_links": {
+    "self": [
+      {
+        "href": "https:\\/\\/sf.greycube.in\\/wp-json\\/wc\\/v3\\/orders\\/956"
+      }
+    ],
+    "collection": [
+      {
+        "href": "https:\\/\\/sf.greycube.in\\/wp-json\\/wc\\/v3\\/orders"
+      }
+    ],
+    "customer": [
+      {
+        "href": "https:\\/\\/sf.greycube.in\\/wp-json\\/wc\\/v3\\/customers\\/2"
+      }
+    ]
+  }
+}
+
+"""
