@@ -5,7 +5,7 @@ import frappe
 from frappe.utils import cstr, cint
 from erpnext.utilities.product import get_price
 from erpnext.erpnext_integrations.connectors.woocommerce_connection import (
-    verify_request, set_items_in_sales_order)
+    verify_request, set_items_in_sales_order, link_customer_and_address)
 import json
 
 
@@ -90,13 +90,16 @@ def get_mapped_product(item_doc):
                 "id": wc_product_category_id
             }
         ],
-
-        # "images": [
-        #     {
-        #         "src":  "{}/{}".format(frappe.utils.get_url(), item_doc.image) if item_doc.image else ""
-        #         # "src": "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_front.jpg"
-        #     }
-        # ]
+        "images": [
+            {
+                "src": "{}/{}".format(frappe.utils.get_url(), item_doc.image) if item_doc.image else ""
+                # "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_front.jpg"
+            }
+            # ,
+            # {
+            #     "src": "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_back.jpg"
+            # }
+        ]
     }
 
 
@@ -107,6 +110,7 @@ def make_item(item_doc):
     woocommerce_id = r.get("id")
     frappe.db.set_value("Item", item_doc.item_code,
                         "woocommerce_id", woocommerce_id)
+    frappe.db.commit()
     return woocommerce_id
 
 
@@ -167,6 +171,7 @@ def _order(*args, **kwargs):
         raw_billing_data = order.get("billing")
         customer_name = raw_billing_data.get(
             "first_name") + " " + raw_billing_data.get("last_name")
+        link_customer_and_address(raw_billing_data, customer_name)
         create_sales_order(order, woocommerce_settings, customer_name)
 
 
@@ -326,3 +331,7 @@ payload = """
 }
 
 """
+<< << << < HEAD
+== == == =
+
+>>>>>> > 90a2076b177cb08604e3fcd8830232ef721ac03e
