@@ -21,8 +21,8 @@ Integration between WooCommerce and ERPNext
 
 - While saving individual item in ERPNext, check if the item exist in woocommerce, if yes update else create new ( At present in point 4 , it creates new items in woocommerce)
 
-- To check if the direct web link for the item images from zomo ( e.g. http://demo.zomoamerica.com/files/two_apple-copiar.jpg(170 kB)
-  http://demo.zomoamerica.com/files/two_apple-copiar.jpg
+- To check if the direct web link for the item images from erpnext ( e.g. http://demo.erpnext.com/files/two_apple-copiar.jpg(170 kB)
+  http://demo.erpnext.com/files/two_apple-copiar.jpg
   ) can be linked to items in woocommerce
 
 ### add custom script for Woocommerce Settings doctype. can be exported as fixture
