@@ -7,6 +7,7 @@ from erpnext.utilities.product import get_price
 from erpnext.erpnext_integrations.connectors.woocommerce_connection import (
     verify_request, set_items_in_sales_order, link_customer_and_address)
 import json
+import time
 
 
 def handle_response_error(r):
@@ -35,6 +36,62 @@ def sync_all_items():
         print("updated %s" % d)
 
 
+@frappe.whitelist()
+def batch_sync_items():
+    # sync erpnext items to WooCommerce product in batch of 25
+    # run from terminal to see messages
+    #  bench --site zomo execute woocommerce_erpnext.woo_connector.batch_sync_items
+
+    # no of items per batch
+    ITEMS_PER_BATCH = 5
+    # seconds BETWEEN requests
+    SLEEP_TIME = 5
+
+    sync_product_categories()
+
+    def chunks(lst, n):
+        """Yield successive n-sized chunks from lst."""
+        for i in range(0, len(lst), n):
+            yield lst[i:i + n]
+
+    def log(res):
+        if not res.get("error"):
+            print("Success %s %s" % (res.get("name"), res.get("id")))
+        else:
+            print(res)
+
+    items = frappe.db.get_all("Item")
+
+    error = False
+    for batch in chunks(items, ITEMS_PER_BATCH):
+        error = False
+        create, update = [], []
+        data = {"create": [], "update": []}
+        for d in batch:
+            doc = frappe.get_doc("Item", d)
+            if not doc.woocommerce_id:
+                create.append(get_mapped_product(doc))
+            else:
+                update.append(get_mapped_product(doc))
+        post_data = {}
+        if create:
+            post_data["create"] = create
+        if update:
+            post_data["update"] = update
+
+        r = get_connection().put("products/batch", post_data).json()
+
+        for d in r.get("create", []):
+            frappe.db.set_value("Item", {"item_name": d.get(
+                "name")}, "woocommerce_id", d.get("id"))
+            log(d)
+
+        for d in r.get("update", []):
+            log(d)
+
+        time.sleep(SLEEP_TIME)
+
+
 def sync_product_categories(item_group=None):
     # sync Erpnext Item Group to WooCommerce Product Category
     # Does not handle nested item group
@@ -42,6 +99,8 @@ def sync_product_categories(item_group=None):
     categories = {}
     for d in r:
         categories[d["name"]] = d["id"]
+
+    print("Syncing categories: ", categories)
 
     for d in frappe.db.get_list("Item Group", fields=['name', 'woocommerce_id_za']):
         if not item_group or item_group == d.name:
@@ -79,7 +138,7 @@ def get_mapped_product(item_doc):
     item_price = get_price(item_doc.item_code, shopping_cart_settings.price_list,
                            shopping_cart_settings.default_customer_group, shopping_cart_settings.company)
 
-    return {
+    product = {
         "name": item_doc.item_name,
         "type": "simple",
         "regular_price": item_price and cstr(item_price["price_list_rate"]) or "",
@@ -101,6 +160,10 @@ def get_mapped_product(item_doc):
             # }
         ]
     }
+    if item_doc.woocommerce_id:
+        product["id"] = item_doc.woocommerce_id
+
+    return product
 
 
 def make_item(item_doc):
@@ -131,8 +194,9 @@ def get_category(product_category_id):
 
 
 def test():
-    data = json.loads(payload)
-    order(**data)
+    # data = json.loads(payload)
+    # order(**data)
+    print(get_connection().get("products/categories?per_page=100"))
 
 
 @frappe.whitelist(allow_guest=True)
@@ -331,7 +395,3 @@ payload = """
 }
 
 """
-<< << << < HEAD
-== == == =
-
->>>>>> > 90a2076b177cb08604e3fcd8830232ef721ac03e
