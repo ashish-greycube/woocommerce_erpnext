@@ -151,13 +151,9 @@ def get_mapped_product(item_doc):
         ],
         "images": [
             {
-                "src": "{}/{}".format(frappe.utils.get_url(), item_doc.image) if item_doc.image else ""
+                "src": "{}/{}".format(frappe.utils.get_url(), item_doc.image) if (item_doc.image and ' ' not in item_doc.image) else ""
                 # "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_front.jpg"
             }
-            # ,
-            # {
-            #     "src": "http://demo.woothemes.com/woocommerce/wp-content/uploads/sites/56/2013/06/T_2_back.jpg"
-            # }
         ]
     }
     if item_doc.woocommerce_id:
