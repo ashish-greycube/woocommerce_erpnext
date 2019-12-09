@@ -22,7 +22,8 @@ def get_connection():
         consumer_key=settings.api_consumer_key,
         consumer_secret=settings.api_consumer_secret,
         wp_api=True,
-        version="wc/v3"
+        version="wc/v3",
+        timeout=600
     )
     return wcapi
 
@@ -43,7 +44,7 @@ def batch_sync_items():
     #  bench --site zomo execute woocommerce_erpnext.woo_connector.batch_sync_items
 
     # no of items per batch
-    ITEMS_PER_BATCH = 5
+    ITEMS_PER_BATCH = 25
     # seconds BETWEEN requests
     SLEEP_TIME = 5
 
@@ -59,6 +60,7 @@ def batch_sync_items():
             print("Success %s %s" % (res.get("name"), res.get("id")))
         else:
             print(res)
+            # collect all error and email to user for failed imports.
 
     items = frappe.db.get_all("Item")
 
@@ -79,6 +81,7 @@ def batch_sync_items():
         if update:
             post_data["update"] = update
 
+        print("Batch - %s" % frappe.utils.now())
         r = get_connection().put("products/batch", post_data).json()
 
         for d in r.get("create", []):
