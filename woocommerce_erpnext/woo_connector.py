@@ -62,7 +62,7 @@ def batch_sync_items():
             print(res)
             # collect all error and email to user for failed imports.
 
-    items = frappe.db.get_all("Item")
+    items = frappe.db.get_all("Item")[0:20]
 
     error = False
     for batch in chunks(items, ITEMS_PER_BATCH):
@@ -126,11 +126,16 @@ def sync_product_categories(item_group=None):
 
 
 def on_update_item(doc, method=None):
-    if not doc.woocommerce_id:
-        make_item(doc)
+
+    wcdoc = frappe.get_single('Woocommerce Settings')
+    if wcdoc.enable_sync:
+        if not doc.woocommerce_id:
+            make_item(doc)
+        else:
+            product = get_mapped_product(doc)
+            r = get_connection().put("products/"+doc.woocommerce_id, product)
     else:
-        product = get_mapped_product(doc)
-        r = get_connection().put("products/"+doc.woocommerce_id, product)
+        pass
 
 
 def get_mapped_product(item_doc):
